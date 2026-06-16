@@ -7,7 +7,6 @@ from nonebot.adapters.onebot.v11 import MessageEvent, PrivateMessageEvent
 from nonebot.exception import FinishedException
 from nonebot.log import logger
 from nonebot.params import ArgStr
-from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 from pydantic import BaseModel
 from pyncm_async import apis as ncm
