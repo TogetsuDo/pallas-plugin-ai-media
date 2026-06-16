@@ -60,7 +60,9 @@ if plugin_config.chat_enable:
     @BotConfig.handle_sober_up
     async def on_sober_up(bot_id, group_id, drunkenness) -> None:
         session = f"{bot_id}_{group_id}"
-        logger.info(f"bot [{bot_id}] sober up in group [{group_id}], clear session [{session}]")
+        logger.info(
+            f"bot [{bot_id}] sober up in group [{group_id}], clear session [{session}]"
+        )
         url = f"{SERVER_URL}{plugin_config.del_session_endpoint}/{session}"
         await HTTPXClient.delete(url)
 

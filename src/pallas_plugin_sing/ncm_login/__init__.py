@@ -29,8 +29,18 @@ class NCMLoginConfig(BaseModel, extra="ignore"):
 ncm_cfg = NCMLoginConfig()
 NCM_SEARCH_TIMEOUT = 15.0
 
-ncm_login_cmd = on_command("网易云登录", priority=10, block=True, permission=permission_for_command("sing.ncm_login"))
-ncm_logout_cmd = on_command("网易云登出", priority=10, block=True, permission=permission_for_command("sing.ncm_logout"))
+ncm_login_cmd = on_command(
+    "网易云登录",
+    priority=10,
+    block=True,
+    permission=permission_for_command("sing.ncm_login"),
+)
+ncm_logout_cmd = on_command(
+    "网易云登出",
+    priority=10,
+    block=True,
+    permission=permission_for_command("sing.ncm_logout"),
+)
 
 
 @ncm_login_cmd.handle()
@@ -158,7 +168,9 @@ async def get_song_id(song_name: str):
         return None
 
     try:
-        logged_in = await asyncio.wait_for(is_ncm_logged_in(), timeout=NCM_SEARCH_TIMEOUT)
+        logged_in = await asyncio.wait_for(
+            is_ncm_logged_in(), timeout=NCM_SEARCH_TIMEOUT
+        )
     except TimeoutError:
         logger.warning(f"ncm login status check timeout for song {song_name!r}")
         return None

@@ -13,7 +13,12 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
-from src.features.cmd_perm.metadata_text import SCENE_GROUP, SCENE_PRIVATE, join_usage, usage_line
+from src.features.cmd_perm.metadata_text import (
+    SCENE_GROUP,
+    SCENE_PRIVATE,
+    join_usage,
+    usage_line,
+)
 from src.foundation.config import GroupConfig, TaskManager
 from src.foundation.db import SingProgress
 from src.shared.utils import HTTPXClient
@@ -169,7 +174,9 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
 
     if text in SING_CONTINUE_CMDS:
         progress = await GroupConfig(group_id=event.group_id).sing_progress()
-        logger.info(f"bot [{event.self_id}] sing continue read progress in group [{event.group_id}]: {progress}")
+        logger.info(
+            f"bot [{event.self_id}] sing continue read progress in group [{event.group_id}]: {progress}"
+        )
         if not progress:
             return False
 
@@ -204,7 +211,9 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     speaker = state["speaker"]
     song_id = await get_song_id(state["song_id"])
     if not song_id:
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await sing_msg.finish(
+            "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
+        )
     key = state["key"]
     chunk_index = state["chunk_index"]
     request_id = str(ULID())
@@ -231,11 +240,15 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     )
     if not response:
         await TaskManager.remove_task(request_id)
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await sing_msg.finish(
+            "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
+        )
     task_id = response.json().get("task_id", "")
     if not task_id:
         await TaskManager.remove_task(request_id)
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await sing_msg.finish(
+            "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
+        )
 
     if chunk_index == 0:
         await config.update_sing_progress(
@@ -283,10 +296,14 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     url = f"{sing_server_url(plugin_config)}{plugin_config.play_endpoint}/{speaker}"
     response = await HTTPXClient.get(url)
     if not response:
-        await play_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await play_cmd.finish(
+            "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
+        )
     task_id = response.json().get("task_id", "")
     if not task_id:
-        await play_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await play_cmd.finish(
+            "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
+        )
 
     await TaskManager.add_task(
         task_id,
@@ -346,7 +363,9 @@ request_song_msg = on_message(
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     plugin_config = get_sing_config()
     config = GroupConfig(event.group_id, cooldown=10)
-    if not await finish_on_cooldown(request_song_msg, config, REQUEST_SONG_COOLDOWN_KEY):
+    if not await finish_on_cooldown(
+        request_song_msg, config, REQUEST_SONG_COOLDOWN_KEY
+    ):
         return
     await config.refresh_cooldown(REQUEST_SONG_COOLDOWN_KEY)
 
@@ -357,7 +376,9 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         return False
 
     request_id = str(ULID())
-    url = f"{sing_server_url(plugin_config)}{plugin_config.request_endpoint}/{request_id}"
+    url = (
+        f"{sing_server_url(plugin_config)}{plugin_config.request_endpoint}/{request_id}"
+    )
 
     response = await HTTPXClient.post(
         url,
@@ -376,11 +397,15 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     )
 
     if not response:
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await sing_msg.finish(
+            "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
+        )
         await TaskManager.remove_task(request_id)
     task_id = response.json().get("task_id", "")
     if not task_id:
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await sing_msg.finish(
+            "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
+        )
         await TaskManager.remove_task(request_id)
 
     await sing_msg.finish("欢呼吧！")
@@ -389,7 +414,9 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 async def what_song(event: Event) -> bool:
     text = event.get_plaintext()
     speakers = get_sing_config().sing_speakers.keys()
-    return any(text.startswith(spk) for spk in speakers) and any(key in text for key in WHAT_SONG_CMDS)
+    return any(text.startswith(spk) for spk in speakers) and any(
+        key in text for key in WHAT_SONG_CMDS
+    )
 
 
 song_title_cmd = on_message(
@@ -404,7 +431,9 @@ song_title_cmd = on_message(
 async def _(event: GroupMessageEvent):
     config = GroupConfig(event.group_id, cooldown=10)
     progress = await config.sing_progress()
-    logger.info(f"bot [{event.self_id}] sing song title query in group [{event.group_id}]: {progress}")
+    logger.info(
+        f"bot [{event.self_id}] sing song title query in group [{event.group_id}]: {progress}"
+    )
 
     if not progress:
         return
