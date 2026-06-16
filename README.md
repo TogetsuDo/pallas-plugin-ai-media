@@ -1,3 +1,7 @@
+<div align="center">
+  <img alt="Pallas-Bot AI" src="https://github.com/user-attachments/assets/fe654813-bf37-4e5f-9c7d-98d867016618" width="427" height="276" />
+</div>
+
 # pallas-plugin-ai-media
 
 Pallas-Bot 4.0 官方扩展：**唱歌**（`sing`）与 **酒后聊天**（`chat`）。
