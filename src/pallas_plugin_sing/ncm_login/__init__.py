@@ -11,8 +11,8 @@ from nonebot.typing import T_State
 from pydantic import BaseModel
 from pyncm_async import apis as ncm
 
-from src.features.cmd_perm import permission_for_command
-from src.shared.utils import HTTPXClient
+from pallas.api.perm import permission_for_command
+from pallas.api.utils import HTTPXClient
 
 from ..config import sing_server_url
 

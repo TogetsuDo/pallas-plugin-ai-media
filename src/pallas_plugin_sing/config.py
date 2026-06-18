@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
-from src.console.webui import install_hot_reload_config
-from src.console.webui.field_help import field_help
+from pallas.api.config import install_hot_reload_config
+from pallas.api.config import field_help
 
 
 class Config(BaseModel, extra="ignore"):
@@ -61,7 +61,7 @@ class Config(BaseModel, extra="ignore"):
 
 
 def on_sing_config_reload(cfg: Config) -> None:
-    from src.plugins.help.plugin_availability import (
+    from packages.help.plugin_availability import (
         invalidate_plugin_help_availability_cache,
     )
 

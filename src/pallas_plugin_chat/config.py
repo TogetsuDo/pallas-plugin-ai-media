@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from src.console.webui import install_hot_reload_config, plugin_config_proxy
+from pallas.api.config import install_hot_reload_config, plugin_config_proxy
 
 
 class Config(BaseModel, extra="ignore"):
@@ -24,7 +24,7 @@ class Config(BaseModel, extra="ignore"):
 
 def on_chat_config_reload(cfg: Config) -> None:
     import pallas_plugin_chat as chat_pkg
-    from src.plugins.help.plugin_availability import (
+    from packages.help.plugin_availability import (
         invalidate_plugin_help_availability_cache,
     )
 
