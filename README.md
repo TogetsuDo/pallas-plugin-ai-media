@@ -10,8 +10,16 @@ Pallas-Bot 4.0 官方扩展：**唱歌**（`sing`）与 **酒后聊天**（`chat
 
 需已安装 [Pallas-Bot](https://github.com/PallasBot/Pallas-Bot) **≥ 4.0**，并部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)。
 
+推荐直接在控制台插件商店安装，或在本体项目中执行：
+
 ```bash
-uv sync --extra plugins-ai-media
+uv run pallas ext install pallas-plugin-ai-media
+```
+
+也可单独安装本包：
+
+```bash
+uv pip install pallas-plugin-ai-media
 ```
 
 ## 功能说明
