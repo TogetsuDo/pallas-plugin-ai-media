@@ -117,6 +117,17 @@ REQUEST_SONG_COOLDOWN_KEY = "request_song"
 WHAT_SONG_COOLDOWN_KEY = "song_title"
 
 
+async def sync_task_id_alias(
+    local_task_id: str,
+    remote_task_id: str,
+    task_payload: dict,
+) -> None:
+    if not remote_task_id or remote_task_id == local_task_id:
+        return
+    await TaskManager.remove_task(local_task_id)
+    await TaskManager.add_task(remote_task_id, task_payload)
+
+
 async def finish_on_cooldown(matcher, config: GroupConfig, cooldown_key: str) -> bool:
     if await config.is_cooldown(cooldown_key):
         return True
@@ -217,15 +228,13 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     key = state["key"]
     chunk_index = state["chunk_index"]
     request_id = str(ULID())
-    await TaskManager.add_task(
-        request_id,
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "task_type": "sing",
-            "start_time": time.time(),
-        },
-    )
+    task_payload = {
+        "bot_id": bot.self_id,
+        "group_id": event.group_id,
+        "task_type": "sing",
+        "start_time": time.time(),
+    }
+    await TaskManager.add_task(request_id, task_payload)
 
     url = f"{sing_server_url(plugin_config)}{plugin_config.sing_endpoint}/{request_id}"
     response = await HTTPXClient.post(
@@ -249,6 +258,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         await sing_msg.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
+    await sync_task_id_alias(request_id, str(task_id), task_payload)
 
     if chunk_index == 0:
         await config.update_sing_progress(
@@ -304,9 +314,8 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         await play_cmd.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
-
     await TaskManager.add_task(
-        task_id,
+        str(task_id),
         {
             "bot_id": bot.self_id,
             "group_id": event.group_id,
@@ -386,15 +395,13 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
             "song_id": song_id,
         },
     )
-    await TaskManager.add_task(
-        request_id,
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "task_type": "request",
-            "start_time": time.time(),
-        },
-    )
+    task_payload = {
+        "bot_id": bot.self_id,
+        "group_id": event.group_id,
+        "task_type": "request",
+        "start_time": time.time(),
+    }
+    await TaskManager.add_task(request_id, task_payload)
 
     if not response:
         await sing_msg.finish(
@@ -407,6 +414,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
         await TaskManager.remove_task(request_id)
+    await sync_task_id_alias(request_id, str(task_id), task_payload)
 
     await sing_msg.finish("欢呼吧！")
 
