@@ -126,6 +126,44 @@ async def sync_task_id_alias(
     await TaskManager.add_task(remote_task_id, task_payload)
 
 
+def sing_debug_enabled() -> bool:
+    return True
+
+
+def log_rule_skip(rule_name: str, event: GroupMessageEvent | Event, reason: str, text: str | None = None) -> None:
+    if not sing_debug_enabled():
+        return
+    logger.info(
+        "sing rule skip rule={} bot_id={} group_id={} user_id={} text={!r} reason={}",
+        rule_name,
+        getattr(event, "self_id", ""),
+        getattr(event, "group_id", 0),
+        getattr(event, "user_id", 0),
+        (text or "").strip(),
+        reason,
+    )
+
+
+def response_task_id(response) -> str:
+    try:
+        data = response.json() if response is not None else {}
+    except Exception as e:
+        logger.warning("sing response json parse failed: {}", e)
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    raw = data.get("task_id")
+    return str(raw).strip() if raw is not None else ""
+
+
+def response_status_code(response) -> int | None:
+    try:
+        code = getattr(response, "status_code", None)
+        return int(code) if code is not None else None
+    except Exception:
+        return None
+
+
 async def finish_on_cooldown(matcher, config: GroupConfig, cooldown_key: str) -> bool:
     if await config.is_cooldown(cooldown_key):
         return True
@@ -136,15 +174,19 @@ async def finish_on_cooldown(matcher, config: GroupConfig, cooldown_key: str) ->
 async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
     plugin_config = get_sing_config()
     if not plugin_config.sing_enable:
+        log_rule_skip("sing", event, "sing disabled")
         return False
     text = event.get_plaintext()
     if not text:
+        log_rule_skip("sing", event, "empty text")
         return False
 
     if SING_CMD not in text and not any(cmd in text for cmd in SING_CONTINUE_CMDS):
+        log_rule_skip("sing", event, "no sing keyword", text)
         return False
 
     if text.endswith(SING_CMD):
+        log_rule_skip("sing", event, "endswith sing cmd -> play path", text)
         return False
 
     has_spk = False
@@ -157,6 +199,7 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
         break
 
     if not has_spk:
+        log_rule_skip("sing", event, "no speaker prefix", text)
         return False
 
     if "key=" in text:
@@ -166,8 +209,10 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
         try:
             key_int = int(key_val)  # 判断输入的key是不是整数
             if key_int < -12 or key_int > 12:
+                log_rule_skip("sing", event, f"key out of range: {key_int}", text)
                 return False  # 限制一下key的大小，一个八度应该够了
         except ValueError:
+            log_rule_skip("sing", event, f"invalid key: {key_val}", text)
             return False
     else:
         key_val = 0
@@ -176,6 +221,7 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
     if text.startswith(SING_CMD):
         song_key = text.replace(SING_CMD, "").strip()
         if not song_key:
+            log_rule_skip("sing", event, "empty song key after sing cmd", text)
             return False
         state["song_id"] = song_key
         state["chunk_index"] = 0
@@ -187,12 +233,14 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
             f"bot [{event.self_id}] sing continue read progress in group [{event.group_id}]: {progress}"
         )
         if not progress:
+            log_rule_skip("sing", event, "continue without progress", text)
             return False
 
         song_id = str(progress.song_id)
         chunk_index = progress.chunk_index + 1
         key_val = progress.key
         if not song_id or chunk_index > 100:
+            log_rule_skip("sing", event, f"invalid continue progress song_id={song_id} chunk_index={chunk_index}", text)
             return False
         state["song_id"] = song_id
         state["chunk_index"] = chunk_index
@@ -235,6 +283,17 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     await TaskManager.add_task(request_id, task_payload)
 
     url = f"{sing_server_url(plugin_config)}{plugin_config.sing_endpoint}/{request_id}"
+    logger.info(
+        "sing request dispatch mode=sing request_id={} bot_id={} group_id={} speaker={} song_id={} chunk_index={} key={} url={}",
+        request_id,
+        bot.self_id,
+        event.group_id,
+        speaker,
+        song_id,
+        chunk_index,
+        key,
+        url,
+    )
     response = await HTTPXClient.post(
         url,
         json={
@@ -246,11 +305,26 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         },
     )
     if not response:
+        logger.warning(
+            "sing request failed mode=sing request_id={} bot_id={} group_id={} url={}",
+            request_id,
+            bot.self_id,
+            event.group_id,
+            url,
+        )
         await TaskManager.remove_task(request_id)
         await sing_msg.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
-    task_id = response.json().get("task_id", "")
+    task_id = response_task_id(response)
+    logger.info(
+        "sing request response mode=sing request_id={} task_id={} status_code={} bot_id={} group_id={}",
+        request_id,
+        task_id or "<missing>",
+        response_status_code(response),
+        bot.self_id,
+        event.group_id,
+    )
     if not task_id:
         await TaskManager.remove_task(request_id)
         await sing_msg.finish(
@@ -273,6 +347,7 @@ async def is_play(bot: Bot, event: Event, state: T_State) -> bool:
     plugin_config = get_sing_config()
     text = event.get_plaintext()
     if not text or not text.endswith(SING_CMD):
+        log_rule_skip("play", event, "not endswith sing cmd", text)
         return False
 
     for name, speaker in plugin_config.sing_speakers.items():
@@ -281,13 +356,14 @@ async def is_play(bot: Bot, event: Event, state: T_State) -> bool:
         state["speaker"] = speaker
         return True
 
+    log_rule_skip("play", event, "no speaker prefix", text)
     return False
 
 
 play_cmd = on_message(
     rule=Rule(is_play),
     permission=permission.GROUP,
-    priority=11,
+    priority=5,
     block=False,
 )
 
@@ -302,12 +378,34 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 
     speaker = state["speaker"]
     url = f"{sing_server_url(plugin_config)}{plugin_config.play_endpoint}/{speaker}"
+    logger.info(
+        "sing request dispatch mode=play bot_id={} group_id={} speaker={} url={}",
+        bot.self_id,
+        event.group_id,
+        speaker,
+        url,
+    )
     response = await HTTPXClient.get(url)
     if not response:
+        logger.warning(
+            "sing request failed mode=play bot_id={} group_id={} speaker={} url={}",
+            bot.self_id,
+            event.group_id,
+            speaker,
+            url,
+        )
         await play_cmd.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
-    task_id = response.json().get("task_id", "")
+    task_id = response_task_id(response)
+    logger.info(
+        "sing request response mode=play task_id={} status_code={} bot_id={} group_id={} speaker={}",
+        task_id or "<missing>",
+        response_status_code(response),
+        bot.self_id,
+        event.group_id,
+        speaker,
+    )
     if not task_id:
         await play_cmd.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
@@ -327,12 +425,15 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 async def is_to_request_song(event: GroupMessageEvent, state: T_State) -> bool:
     plugin_config = get_sing_config()
     if not plugin_config.sing_enable:
+        log_rule_skip("request", event, "sing disabled")
         return False
     text = event.get_plaintext()
     if not text:
+        log_rule_skip("request", event, "empty text")
         return False
 
     if REQUEST_SONG_CMD not in text:
+        log_rule_skip("request", event, "no request keyword", text)
         return False
 
     if not text.endswith(REQUEST_SONG_CMD):
@@ -346,15 +447,18 @@ async def is_to_request_song(event: GroupMessageEvent, state: T_State) -> bool:
             break
 
         if not has_spk:
+            log_rule_skip("request", event, "no speaker prefix", text)
             return False
 
         if text.startswith(REQUEST_SONG_CMD):
             song_name = text.replace(REQUEST_SONG_CMD, "").strip()
             if not song_name:
+                log_rule_skip("request", event, "empty song name", text)
                 return False
             state["song_name"] = song_name
             return True
 
+    log_rule_skip("request", event, "request pattern not matched", text)
     return False
 
 
@@ -386,6 +490,15 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     url = (
         f"{sing_server_url(plugin_config)}{plugin_config.request_endpoint}/{request_id}"
     )
+    logger.info(
+        "sing request dispatch mode=request request_id={} bot_id={} group_id={} song_name={} song_id={} url={}",
+        request_id,
+        bot.self_id,
+        event.group_id,
+        song_name,
+        song_id,
+        url,
+    )
 
     response = await HTTPXClient.post(
         url,
@@ -402,11 +515,28 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     await TaskManager.add_task(request_id, task_payload)
 
     if not response:
+        logger.warning(
+            "sing request failed mode=request request_id={} bot_id={} group_id={} song_id={} url={}",
+            request_id,
+            bot.self_id,
+            event.group_id,
+            song_id,
+            url,
+        )
         await sing_msg.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
         await TaskManager.remove_task(request_id)
-    task_id = response.json().get("task_id", "")
+    task_id = response_task_id(response)
+    logger.info(
+        "sing request response mode=request request_id={} task_id={} status_code={} bot_id={} group_id={} song_id={}",
+        request_id,
+        task_id or "<missing>",
+        response_status_code(response),
+        bot.self_id,
+        event.group_id,
+        song_id,
+    )
     if not task_id:
         await sing_msg.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
