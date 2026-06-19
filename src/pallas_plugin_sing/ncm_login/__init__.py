@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from pyncm_async import apis as ncm
 
 from pallas.api.perm import permission_for_command
-from pallas.api.utils import HTTPXClient
+from pallas.core.shared.utils import HTTPXClient
 
 from ..config import sing_server_url
 

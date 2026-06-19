@@ -12,16 +12,14 @@ from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
-)
-from pallas.api.metadata import (
     SCENE_GROUP,
     SCENE_PRIVATE,
     join_usage,
     usage_line,
 )
 from pallas.api.config import GroupConfig, TaskManager
-from pallas.core.foundation.db import SingProgress
-from pallas.api.utils import HTTPXClient
+from pallas.core.foundation.db.modules import SingProgress
+from pallas.core.shared.utils import HTTPXClient
 
 from .config import get_sing_config, sing_server_url
 from .ncm_login import get_song_id, get_song_title
@@ -68,7 +66,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛唱歌 歌曲名 [key=±N]",
                 "brief_des": "AI 翻唱指定歌曲",
-                "detail_des": "按歌名搜索并翻唱，可用 key=±N 调音；每段约 120 秒。",
+                "detail_des": "按歌名搜索并翻唱，可用 key=±N 调整音调；每次会返回一段音频。",
             },
             {
                 "func": "继续唱",
@@ -76,7 +74,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛继续唱 / 牛牛接着唱",
                 "brief_des": "继续上次未完成的歌曲",
-                "detail_des": "继续播放上次未完成的歌曲的下一个片段。",
+                "detail_des": "接着唱上一次没唱完的那首歌，继续返回下一段片段。",
             },
             {
                 "func": "点歌",
@@ -84,7 +82,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛点歌 歌曲名",
                 "brief_des": "播放网易云原曲",
-                "detail_des": "在vip有效的情况下优先播放vip歌曲",
+                "detail_des": "按歌名搜索原曲并播放；如果登录状态可用，也能点需要会员权限的歌。",
             },
             {
                 "func": "牛牛什么歌",
@@ -92,7 +90,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛什么歌 / 牛牛哪首歌 / 牛牛啥歌",
                 "brief_des": "查询当前播放的歌曲名",
-                "detail_des": "查询牛牛当前正在演唱的歌曲名称。",
+                "detail_des": "查看牛牛当前正在唱的是哪一首歌。",
             },
             {
                 "func": "网易云登录",
@@ -101,7 +99,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "网易云登录 / 网易云登出",
                 "command_permissions": ["sing.ncm_login", "sing.ncm_logout"],
                 "brief_des": "绑定或解绑网易云",
-                "detail_des": "私聊按提示完成登录或登出，用于点歌 VIP 等能力。",
+                "detail_des": "私聊按提示完成登录或登出，用于点歌和播放需要网易云登录支持的内容。",
             },
         ],
     },
@@ -115,6 +113,17 @@ SING_COOLDOWN_KEY = "sing"
 PLAY_COOLDOWN_KEY = "play"
 REQUEST_SONG_COOLDOWN_KEY = "request_song"
 WHAT_SONG_COOLDOWN_KEY = "song_title"
+
+
+async def sync_task_id_alias(
+    local_task_id: str,
+    remote_task_id: str,
+    task_payload: dict,
+) -> None:
+    if not remote_task_id or remote_task_id == local_task_id:
+        return
+    await TaskManager.remove_task(local_task_id)
+    await TaskManager.add_task(remote_task_id, task_payload)
 
 
 async def finish_on_cooldown(matcher, config: GroupConfig, cooldown_key: str) -> bool:
@@ -217,15 +226,13 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     key = state["key"]
     chunk_index = state["chunk_index"]
     request_id = str(ULID())
-    await TaskManager.add_task(
-        request_id,
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "task_type": "sing",
-            "start_time": time.time(),
-        },
-    )
+    task_payload = {
+        "bot_id": bot.self_id,
+        "group_id": event.group_id,
+        "task_type": "sing",
+        "start_time": time.time(),
+    }
+    await TaskManager.add_task(request_id, task_payload)
 
     url = f"{sing_server_url(plugin_config)}{plugin_config.sing_endpoint}/{request_id}"
     response = await HTTPXClient.post(
@@ -249,6 +256,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         await sing_msg.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
+    await sync_task_id_alias(request_id, str(task_id), task_payload)
 
     if chunk_index == 0:
         await config.update_sing_progress(
@@ -304,9 +312,8 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         await play_cmd.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
-
     await TaskManager.add_task(
-        task_id,
+        str(task_id),
         {
             "bot_id": bot.self_id,
             "group_id": event.group_id,
@@ -386,15 +393,13 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
             "song_id": song_id,
         },
     )
-    await TaskManager.add_task(
-        request_id,
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "task_type": "request",
-            "start_time": time.time(),
-        },
-    )
+    task_payload = {
+        "bot_id": bot.self_id,
+        "group_id": event.group_id,
+        "task_type": "request",
+        "start_time": time.time(),
+    }
+    await TaskManager.add_task(request_id, task_payload)
 
     if not response:
         await sing_msg.finish(
@@ -407,6 +412,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
         await TaskManager.remove_task(request_id)
+    await sync_task_id_alias(request_id, str(task_id), task_payload)
 
     await sing_msg.finish("欢呼吧！")
 

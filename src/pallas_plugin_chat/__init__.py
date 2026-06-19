@@ -11,10 +11,12 @@ from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
+    SCENE_GROUP,
+    join_usage,
+    usage_line,
 )
-from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 from pallas.api.config import BotConfig, GroupConfig, TaskManager
-from pallas.api.utils import HTTPXClient
+from pallas.core.shared.utils import HTTPXClient
 
 from .config import Config, get_chat_config, plugin_config
 
@@ -22,8 +24,8 @@ __plugin_meta__ = PluginMetadata(
     name="酒后聊天",
     description="牛牛醉酒时在群内进行 AI 对话。",
     usage=join_usage(
-        usage_line("@牛牛", "醉酒时与牛牛对话"),
-        usage_line("牛牛 + 文本", "以「牛牛」开头的消息"),
+        usage_line("@牛牛", "醉酒时和牛牛聊天"),
+        usage_line("牛牛 + 文本", "醉酒时直接和牛牛搭话"),
     ),
     type="application",
     homepage=PLUGIN_HOMEPAGE,
@@ -39,7 +41,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 / 牛牛 + 文本",
                 "brief_des": "醉酒时 AI 对话",
-                "detail_des": "须先「牛牛喝酒」；牛牛根据上下文回复，启用 TTS 时可能附带语音。",
+                "detail_des": "要先让牛牛喝酒；它会结合当前上下文接话，开启 TTS 时还可能附带语音。",
             },
         ],
     },

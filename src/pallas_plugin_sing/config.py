@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 
-from pallas.api.config import install_hot_reload_config
-from pallas.api.config import field_help
+from pallas.api.config import field_help, install_hot_reload_config
 
 
 class Config(BaseModel, extra="ignore"):
