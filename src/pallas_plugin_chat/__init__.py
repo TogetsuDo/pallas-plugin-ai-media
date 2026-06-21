@@ -17,6 +17,7 @@ from pallas.api.metadata import (
 )
 from pallas.api.config import BotConfig, GroupConfig, TaskManager
 from pallas.core.shared.utils import HTTPXClient
+from pallas.product.llm import ChatSubmitRequest, submit_chat_task
 
 from .config import Config, get_chat_config, plugin_config
 
@@ -104,7 +105,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if not text:
         return
 
-    session = f"{event.self_id}_{event.group_id}"
+    session = f"{bot.self_id}_{event.group_id}"
     request_id = str(ULID())
     await TaskManager.add_task(
         request_id,
@@ -115,22 +116,23 @@ async def _(bot: Bot, event: GroupMessageEvent):
             "start_time": time.time(),
         },
     )
-
-    url = f"{SERVER_URL}{plugin_config.chat_endpoint}/{request_id}"
-    response = await HTTPXClient.post(
-        url,
-        json={
-            "session": session,
-            "text": text,
-            "token_count": 50,
-            "tts": plugin_config.tts_enable,
-        },
+    result = await submit_chat_task(
+        ChatSubmitRequest(
+            request_id=request_id,
+            session_id=session,
+            user_text=text,
+            system_prompt="你是牛牛。",
+            bot_id=int(bot.self_id),
+            group_id=int(event.group_id),
+            mode="drunk",
+            task="drunk",
+            token_count=50,
+        )
     )
-    if not response:
+    if not result or not getattr(result, "ok", False):
         await TaskManager.remove_task(request_id)
         return
-
-    task_id = response.json().get("task_id", "")
+    task_id = str(getattr(result, "task_id", "") or "")
     if not task_id:
         await TaskManager.remove_task(request_id)
         return
