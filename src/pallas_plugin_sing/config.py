@@ -36,7 +36,8 @@ class Config(BaseModel, extra="ignore"):
     play_endpoint: str = Field(
         default="/api/play",
         description=field_help(
-            "触发或获取播放的接口路径",
+            "触发播放任务的接口路径",
+            "将以 POST /{request_id} 形式调用，并在 body 中传 speaker",
             "以 / 开头；留空或错误会导致播放失败",
         ),
     )

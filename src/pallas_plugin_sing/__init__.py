@@ -259,7 +259,7 @@ sing_msg = on_message(
 
 
 @sing_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def handle_sing(bot: Bot, event: GroupMessageEvent, state: T_State):
     plugin_config = get_sing_config()
     config = GroupConfig(event.group_id, cooldown=10)
     if not await finish_on_cooldown(sing_msg, config, SING_COOLDOWN_KEY):
@@ -369,7 +369,7 @@ play_cmd = on_message(
 
 
 @play_cmd.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def handle_play(bot: Bot, event: GroupMessageEvent, state: T_State):
     plugin_config = get_sing_config()
     config = GroupConfig(event.group_id, cooldown=10)
     if not await finish_on_cooldown(play_cmd, config, PLAY_COOLDOWN_KEY):
@@ -377,29 +377,41 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     await config.refresh_cooldown(PLAY_COOLDOWN_KEY)
 
     speaker = state["speaker"]
-    url = f"{sing_server_url(plugin_config)}{plugin_config.play_endpoint}/{speaker}"
+    request_id = str(ULID())
+    task_payload = {
+        "bot_id": bot.self_id,
+        "group_id": event.group_id,
+        "task_type": "play",
+        "start_time": time.time(),
+    }
+    await TaskManager.add_task(request_id, task_payload)
+    url = f"{sing_server_url(plugin_config)}{plugin_config.play_endpoint}/{request_id}"
     logger.info(
-        "sing request dispatch mode=play bot_id={} group_id={} speaker={} url={}",
+        "sing request dispatch mode=play request_id={} bot_id={} group_id={} speaker={} url={}",
+        request_id,
         bot.self_id,
         event.group_id,
         speaker,
         url,
     )
-    response = await HTTPXClient.get(url)
+    response = await HTTPXClient.post(url, json={"speaker": speaker})
     if not response:
         logger.warning(
-            "sing request failed mode=play bot_id={} group_id={} speaker={} url={}",
+            "sing request failed mode=play request_id={} bot_id={} group_id={} speaker={} url={}",
+            request_id,
             bot.self_id,
             event.group_id,
             speaker,
             url,
         )
+        await TaskManager.remove_task(request_id)
         await play_cmd.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
     task_id = response_task_id(response)
     logger.info(
-        "sing request response mode=play task_id={} status_code={} bot_id={} group_id={} speaker={}",
+        "sing request response mode=play request_id={} task_id={} status_code={} bot_id={} group_id={} speaker={}",
+        request_id,
         task_id or "<missing>",
         response_status_code(response),
         bot.self_id,
@@ -407,18 +419,11 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         speaker,
     )
     if not task_id:
+        await TaskManager.remove_task(request_id)
         await play_cmd.finish(
             "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
         )
-    await TaskManager.add_task(
-        str(task_id),
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "task_type": "play",
-            "start_time": time.time(),
-        },
-    )
+    await sync_task_id_alias(request_id, str(task_id), task_payload)
     await play_cmd.finish("欢呼吧！")
 
 
@@ -471,7 +476,7 @@ request_song_msg = on_message(
 
 
 @request_song_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def handle_request_song(bot: Bot, event: GroupMessageEvent, state: T_State):
     plugin_config = get_sing_config()
     config = GroupConfig(event.group_id, cooldown=10)
     if not await finish_on_cooldown(

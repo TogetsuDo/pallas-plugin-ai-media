@@ -151,3 +151,46 @@ async def test_sync_task_id_alias_moves_task_to_remote_id(monkeypatch: pytest.Mo
     assert removed == ["local-request-id"]
     assert [task_id for task_id, _ in added] == ["remote-task-id"]
     assert added[0][1]["task_type"] == "sing"
+
+
+@pytest.mark.asyncio
+async def test_play_dispatch_uses_request_id_endpoint_and_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    added: list[tuple[str, dict]] = []
+    removed: list[str] = []
+    requests: list[tuple[str, dict]] = []
+    matcher = DummyMatcher()
+
+    class DummyBot:
+        self_id = "123456"
+
+    class DummyEvent:
+        group_id = 42
+
+    async def fake_add_task(task_id: str, payload: dict) -> None:
+        added.append((task_id, dict(payload)))
+
+    async def fake_remove_task(task_id: str) -> None:
+        removed.append(task_id)
+
+    async def fake_post(url: str, json: dict | None = None):
+        requests.append((url, dict(json or {})))
+        return DummyResponse("remote-play-task-id")
+
+    async def fake_finish_on_cooldown(*_args, **_kwargs) -> bool:
+        return True
+
+    monkeypatch.setattr(sing_mod, "play_cmd", matcher)
+    monkeypatch.setattr(sing_mod, "GroupConfig", DummyConfig)
+    monkeypatch.setattr(sing_mod.TaskManager, "add_task", fake_add_task)
+    monkeypatch.setattr(sing_mod.TaskManager, "remove_task", fake_remove_task)
+    monkeypatch.setattr(sing_mod.HTTPXClient, "post", fake_post)
+    monkeypatch.setattr(sing_mod, "finish_on_cooldown", fake_finish_on_cooldown)
+
+    await sing_mod.handle_play(DummyBot(), DummyEvent(), {"speaker": "pallas"})
+
+    assert requests == [("http://127.0.0.1:9099/api/play/local-request-id", {"speaker": "pallas"})]
+    assert removed == ["local-request-id"]
+    assert [task_id for task_id, _ in added] == ["local-request-id", "remote-play-task-id"]
+    assert added[0][1]["task_type"] == "play"
+    assert added[1][1]["task_type"] == "play"
+    assert matcher.finished == ["欢呼吧！"]
