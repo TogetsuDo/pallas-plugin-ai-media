@@ -122,8 +122,12 @@ async def sync_task_id_alias(
 ) -> None:
     if not remote_task_id or remote_task_id == local_task_id:
         return
-    await TaskManager.remove_task(local_task_id)
-    await TaskManager.add_task(remote_task_id, task_payload)
+    logger.info(
+        "sing task alias ignored request_id={} remote_task_id={} task_type={}",
+        local_task_id,
+        remote_task_id,
+        task_payload.get("task_type", ""),
+    )
 
 
 def sing_debug_enabled() -> bool:
