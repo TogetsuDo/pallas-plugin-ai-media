@@ -19,6 +19,7 @@ from pallas.api.metadata import (
 )
 from pallas.api.config import GroupConfig, TaskManager
 from pallas.core.foundation.db.modules import SingProgress
+from pallas.product.llm.knowledge.declare import knowledge_source_row
 from pallas.core.shared.utils import HTTPXClient
 
 from .config import get_sing_config, sing_server_url
@@ -102,6 +103,40 @@ __plugin_meta__ = PluginMetadata(
                 "detail_des": "私聊按提示完成登录或登出，用于点歌和播放需要网易云登录支持的内容。",
             },
         ],
+        "knowledge_sources": [
+            knowledge_source_row(
+                source_id="sing.faq",
+                title="牛牛唱歌说明",
+                description="AI 翻唱、点歌与续唱",
+                chunks=[
+                    {
+                        "title": "AI 翻唱",
+                        "content": (
+                            "发送「牛牛唱歌 歌曲名」可 AI 翻唱；"
+                            "可选 key=±N 调整音调（-12 到 12）。"
+                        ),
+                        "keywords": "唱歌,翻唱,牛牛唱歌,key,音调",
+                    },
+                    {
+                        "title": "续唱与点歌",
+                        "content": (
+                            "「牛牛继续唱 / 牛牛接着唱」续唱上一首；"
+                            "「牛牛点歌 歌曲名」播放网易云原曲；"
+                            "「牛牛什么歌 / 牛牛哪首歌 / 牛牛啥歌」查询当前曲目。"
+                        ),
+                        "keywords": "继续唱,接着唱,点歌,什么歌,原曲",
+                    },
+                    {
+                        "title": "网易云登录",
+                        "content": (
+                            "私聊「网易云登录 / 网易云登出」可绑定或解绑网易云账号，"
+                            "用于播放需登录支持的内容（维护者向口令）。"
+                        ),
+                        "keywords": "网易云,登录,登出,会员",
+                    },
+                ],
+            ),
+        ],
     },
 )
 
@@ -134,7 +169,12 @@ def sing_debug_enabled() -> bool:
     return True
 
 
-def log_rule_skip(rule_name: str, event: GroupMessageEvent | Event, reason: str, text: str | None = None) -> None:
+def log_rule_skip(
+    rule_name: str,
+    event: GroupMessageEvent | Event,
+    reason: str,
+    text: str | None = None,
+) -> None:
     if not sing_debug_enabled():
         return
     logger.info(
@@ -244,7 +284,12 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
         chunk_index = progress.chunk_index + 1
         key_val = progress.key
         if not song_id or chunk_index > 100:
-            log_rule_skip("sing", event, f"invalid continue progress song_id={song_id} chunk_index={chunk_index}", text)
+            log_rule_skip(
+                "sing",
+                event,
+                f"invalid continue progress song_id={song_id} chunk_index={chunk_index}",
+                text,
+            )
             return False
         state["song_id"] = song_id
         state["chunk_index"] = chunk_index

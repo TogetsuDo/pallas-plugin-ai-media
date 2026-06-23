@@ -18,6 +18,7 @@ from pallas.api.metadata import (
 from pallas.api.config import BotConfig, GroupConfig, TaskManager
 from pallas.core.shared.utils import HTTPXClient
 from pallas.product.llm import ChatSubmitRequest, submit_chat_task
+from pallas.product.llm.knowledge.declare import knowledge_source_row
 
 from .config import Config, get_chat_config, plugin_config
 
@@ -44,6 +45,36 @@ __plugin_meta__ = PluginMetadata(
                 "brief_des": "醉酒时 AI 对话",
                 "detail_des": "要先让牛牛喝酒；它会结合当前上下文接话，开启 TTS 时还可能附带语音。",
             },
+        ],
+        "knowledge_sources": [
+            knowledge_source_row(
+                source_id="chat.faq",
+                title="酒后聊天说明",
+                description="醉酒时的 AI 对话",
+                chunks=[
+                    {
+                        "title": "如何触发",
+                        "content": (
+                            "牛牛须先处于醉酒状态（可先发送「牛牛喝酒」）；"
+                            "然后在群内 @牛牛 发消息，或以「牛牛 + 文本」搭话。"
+                        ),
+                        "keywords": "酒后,聊天,醉酒,@牛牛,怎么聊",
+                    },
+                    {
+                        "title": "与随时闲聊的分工",
+                        "content": (
+                            "未醉酒时用 @牛牛 走的是「随时闲聊」插件；"
+                            "醉酒后才走酒后聊天，两者不要混为一谈。"
+                        ),
+                        "keywords": "闲聊,随时闲聊,醉酒,区别,分工",
+                    },
+                    {
+                        "title": "如何结束",
+                        "content": "发送「牛牛醒一醒」或「牛牛别喝了」可醒酒并结束酒后会话。",
+                        "keywords": "醒酒,醒一醒,别喝了,结束",
+                    },
+                ],
+            ),
         ],
     },
 )
