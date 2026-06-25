@@ -59,6 +59,8 @@ __plugin_meta__ = PluginMetadata(
             {"id": "sing.play", "cd_sec": 3},
             {"id": "sing.request_song", "cd_sec": 5},
             {"id": "sing.song_title", "cd_sec": 2},
+            {"id": "sing.ncm_login", "cd_sec": 5},
+            {"id": "sing.ncm_logout", "cd_sec": 5},
         ],
         "menu_data": [
             {
