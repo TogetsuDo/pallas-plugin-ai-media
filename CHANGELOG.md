@@ -5,6 +5,9 @@
 
 ## [Unreleased]
 
+## [4.0.13] - 2026-06-26
+- fix(chat): 醉话走统一 LLM 提交并构建 drunk system prompt，保留 legacy RWKV 回退
+
 ## [4.0.12] - 2026-06-25
 - feat(metadata): 补充网易云登录/登出命令冷却声明
 

@@ -17,7 +17,14 @@ from pallas.api.metadata import (
 )
 from pallas.api.config import BotConfig, GroupConfig, TaskManager
 from pallas.core.shared.utils import HTTPXClient
-from pallas.product.llm import ChatSubmitRequest, submit_chat_task
+from pallas.product.llm import (
+    ChatSubmitRequest,
+    build_drunk_chat_system_prompt,
+    is_legacy_rwkv_drunk_chat_enabled,
+    is_llm_chat_service_enabled,
+    submit_chat_task,
+)
+from pallas.product.llm.legacy_rwkv import submit_rwkv_drunk_chat
 from pallas.product.llm.knowledge.declare import knowledge_source_row
 
 from .config import Config, get_chat_config, plugin_config
@@ -143,23 +150,54 @@ async def _(bot: Bot, event: GroupMessageEvent):
         {
             "bot_id": bot.self_id,
             "group_id": event.group_id,
+            "user_id": event.user_id,
             "task_type": "chat",
             "start_time": time.time(),
         },
     )
-    result = await submit_chat_task(
-        ChatSubmitRequest(
-            request_id=request_id,
-            session_id=session,
-            user_text=text,
-            system_prompt="你是牛牛。",
-            bot_id=int(bot.self_id),
-            group_id=int(event.group_id),
-            mode="drunk",
-            task="drunk",
-            token_count=50,
+
+    if is_llm_chat_service_enabled():
+        prompt_ctx = await build_drunk_chat_system_prompt(
+            int(bot.self_id),
+            int(event.group_id),
+            text,
+            user_id=int(event.user_id),
         )
-    )
+        if prompt_ctx is None:
+            await TaskManager.remove_task(request_id)
+            logger.warning(
+                "drunk chat system prompt empty: bot={} group={}",
+                bot.self_id,
+                event.group_id,
+            )
+            return
+        result = await submit_chat_task(
+            ChatSubmitRequest(
+                request_id=request_id,
+                session_id=session,
+                user_text=text,
+                system_prompt=prompt_ctx.system_prompt,
+                bot_id=int(bot.self_id),
+                group_id=int(event.group_id),
+                user_id=int(event.user_id),
+                mode="drunk",
+                task="drunk",
+                token_count=prompt_ctx.token_count or 50,
+                temperature=prompt_ctx.temperature,
+            )
+        )
+    elif is_legacy_rwkv_drunk_chat_enabled():
+        task_id, ok = await submit_rwkv_drunk_chat(
+            request_id=request_id,
+            session=session,
+            text=text,
+            tts=False,
+            chat_endpoint=plugin_config.chat_endpoint,
+        )
+        result = type("LegacyResult", (), {"ok": ok, "task_id": task_id})()
+    else:
+        await TaskManager.remove_task(request_id)
+        return
     if not result or not getattr(result, "ok", False):
         await TaskManager.remove_task(request_id)
         return
