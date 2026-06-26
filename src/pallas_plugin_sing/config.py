@@ -30,7 +30,14 @@ class Config(BaseModel, extra="ignore"):
         description=field_help(
             "提交合成任务的接口路径",
             "以 / 开头的路径，会拼在「主机:端口」后面",
-            "须与后端文档一致",
+            "legacy 模式使用；media_task 模式改走 /api/media/tasks",
+        ),
+    )
+    sing_runtime_mode: str = Field(
+        default="legacy",
+        description=field_help(
+            "唱歌任务提交模式",
+            "legacy 直连 /api/sing；media_task 走 AI 仓统一媒体任务 API",
         ),
     )
     play_endpoint: str = Field(
@@ -79,3 +86,9 @@ clear_sing_config_cache = plugin_webui.clear_cache
 def sing_server_url(cfg: Config | None = None) -> str:
     c = cfg or get_sing_config()
     return f"http://{c.ai_server_host}:{c.ai_server_port}"
+
+
+def sing_runtime_mode(cfg: Config | None = None) -> str:
+    c = cfg or get_sing_config()
+    raw = (c.sing_runtime_mode or "legacy").strip().lower()
+    return "media_task" if raw == "media_task" else "legacy"

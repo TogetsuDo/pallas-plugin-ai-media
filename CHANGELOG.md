@@ -5,6 +5,9 @@
 
 ## [Unreleased]
 
+## [4.0.14] - 2026-06-27
+- fix(sing): 恢复 `sing_runtime_mode` 配置与解析函数，修复牛牛连通探活 AttributeError
+
 ## [4.0.13] - 2026-06-26
 - fix(chat): 醉话走统一 LLM 提交并构建 drunk system prompt，保留 legacy RWKV 回退
 
