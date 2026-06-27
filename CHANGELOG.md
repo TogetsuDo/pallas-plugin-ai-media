@@ -5,6 +5,9 @@
 
 ## [Unreleased]
 
+## [4.0.15] - 2026-06-27
+- docs(readme): 「怎么使用」口令统一加行内代码标记
+
 ## [4.0.14] - 2026-06-27
 - fix(sing): 恢复 `sing_runtime_mode` 配置与解析函数，修复牛牛连通探活 AttributeError
 
