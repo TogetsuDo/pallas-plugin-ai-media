@@ -2,7 +2,7 @@ import time
 
 from nonebot import logger, on_message
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
+from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot.typing import T_State
@@ -18,6 +18,8 @@ from pallas.api.metadata import (
     usage_line,
 )
 from pallas.api.config import GroupConfig, TaskManager
+from pallas.api.limits import is_command_cooldown_ready, refresh_command_cooldown
+from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.db.modules import SingProgress
 from pallas.product.llm.knowledge.declare import knowledge_source_row
 from pallas.core.shared.utils import HTTPXClient
@@ -51,6 +53,14 @@ __plugin_meta__ = PluginMetadata(
             "牛牛啥歌",
         ],
         "command_permissions": [
+            {
+                "id": "sing.sing",
+                "label": "牛牛唱歌 / 牛牛继续唱",
+                "default": "everyone",
+            },
+            {"id": "sing.play", "label": "牛牛唱歌（随机）", "default": "everyone"},
+            {"id": "sing.request_song", "label": "牛牛点歌", "default": "everyone"},
+            {"id": "sing.song_title", "label": "牛牛什么歌", "default": "everyone"},
             {"id": "sing.ncm_login", "label": "网易云登录", "default": "superuser"},
             {"id": "sing.ncm_logout", "label": "网易云登出", "default": "superuser"},
         ],
@@ -68,6 +78,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛唱歌 歌曲名 [key=±N]",
+                "command_permission": "sing.sing",
                 "brief_des": "AI 翻唱指定歌曲",
                 "detail_des": "按歌名搜索并翻唱，可用 key=±N 调整音调；每次会返回一段音频。",
             },
@@ -76,6 +87,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛继续唱 / 牛牛接着唱",
+                "command_permission": "sing.sing",
                 "brief_des": "继续上次未完成的歌曲",
                 "detail_des": "接着唱上一次没唱完的那首歌，继续返回下一段片段。",
             },
@@ -84,6 +96,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛点歌 歌曲名",
+                "command_permission": "sing.request_song",
                 "brief_des": "播放网易云原曲",
                 "detail_des": "按歌名搜索原曲并播放；如果登录状态可用，也能点需要会员权限的歌。",
             },
@@ -92,6 +105,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛什么歌 / 牛牛哪首歌 / 牛牛啥歌",
+                "command_permission": "sing.song_title",
                 "brief_des": "查询当前播放的歌曲名",
                 "detail_des": "查看牛牛当前正在唱的是哪一首歌。",
             },
@@ -146,10 +160,21 @@ SING_CMD = "唱歌"
 REQUEST_SONG_CMD = "点歌"
 SING_CONTINUE_CMDS = {"继续唱", "接着唱"}
 WHAT_SONG_CMDS = {"什么歌", "哪首歌", "啥歌"}
-SING_COOLDOWN_KEY = "sing"
-PLAY_COOLDOWN_KEY = "play"
-REQUEST_SONG_COOLDOWN_KEY = "request_song"
-WHAT_SONG_COOLDOWN_KEY = "song_title"
+
+
+async def guard_command_cooldown(
+    matcher,
+    event: GroupMessageEvent,
+    command_id: str,
+    *,
+    speak: bool = True,
+) -> bool:
+    if not await is_command_cooldown_ready(event, command_id):
+        if speak:
+            await matcher.finish("牛牛还在回味上一首，稍等再点歌吧。")
+        return False
+    await refresh_command_cooldown(event, command_id)
+    return True
 
 
 async def sync_task_id_alias(
@@ -210,11 +235,10 @@ def response_status_code(response) -> int | None:
         return None
 
 
-async def finish_on_cooldown(matcher, config: GroupConfig, cooldown_key: str) -> bool:
-    if await config.is_cooldown(cooldown_key):
-        return True
-    await matcher.finish("牛牛还在回味上一首，稍等再点歌吧。")
-    return False
+async def finish_on_cooldown(
+    matcher, event: GroupMessageEvent, command_id: str
+) -> bool:
+    return await guard_command_cooldown(matcher, event, command_id)
 
 
 async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
@@ -305,17 +329,16 @@ sing_msg = on_message(
     rule=Rule(is_to_sing),
     priority=5,
     block=True,
-    permission=permission.GROUP,
+    permission=group_message_permission_for_command("sing.sing"),
 )
 
 
 @sing_msg.handle()
 async def handle_sing(bot: Bot, event: GroupMessageEvent, state: T_State):
     plugin_config = get_sing_config()
-    config = GroupConfig(event.group_id, cooldown=10)
-    if not await finish_on_cooldown(sing_msg, config, SING_COOLDOWN_KEY):
+    if not await finish_on_cooldown(sing_msg, event, "sing.sing"):
         return
-    await config.refresh_cooldown(SING_COOLDOWN_KEY)
+    config = GroupConfig(event.group_id)
     speaker = state["speaker"]
     song_id = await get_song_id(state["song_id"])
     if not song_id:
@@ -413,7 +436,7 @@ async def is_play(bot: Bot, event: Event, state: T_State) -> bool:
 
 play_cmd = on_message(
     rule=Rule(is_play),
-    permission=permission.GROUP,
+    permission=group_message_permission_for_command("sing.play"),
     priority=5,
     block=False,
 )
@@ -422,10 +445,8 @@ play_cmd = on_message(
 @play_cmd.handle()
 async def handle_play(bot: Bot, event: GroupMessageEvent, state: T_State):
     plugin_config = get_sing_config()
-    config = GroupConfig(event.group_id, cooldown=10)
-    if not await finish_on_cooldown(play_cmd, config, PLAY_COOLDOWN_KEY):
+    if not await finish_on_cooldown(play_cmd, event, "sing.play"):
         return
-    await config.refresh_cooldown(PLAY_COOLDOWN_KEY)
 
     speaker = state["speaker"]
     request_id = str(ULID())
@@ -522,19 +543,15 @@ request_song_msg = on_message(
     rule=Rule(is_to_request_song),
     priority=5,
     block=True,
-    permission=permission.GROUP,
+    permission=group_message_permission_for_command("sing.request_song"),
 )
 
 
 @request_song_msg.handle()
 async def handle_request_song(bot: Bot, event: GroupMessageEvent, state: T_State):
     plugin_config = get_sing_config()
-    config = GroupConfig(event.group_id, cooldown=10)
-    if not await finish_on_cooldown(
-        request_song_msg, config, REQUEST_SONG_COOLDOWN_KEY
-    ):
+    if not await finish_on_cooldown(request_song_msg, event, "sing.request_song"):
         return
-    await config.refresh_cooldown(REQUEST_SONG_COOLDOWN_KEY)
 
     song_name = state["song_name"]
 
@@ -615,13 +632,13 @@ song_title_cmd = on_message(
     rule=Rule(what_song),
     priority=12,
     block=True,
-    permission=permission.GROUP,
+    permission=group_message_permission_for_command("sing.song_title"),
 )
 
 
 @song_title_cmd.handle()
 async def _(event: GroupMessageEvent):
-    config = GroupConfig(event.group_id, cooldown=10)
+    config = GroupConfig(event.group_id)
     progress = await config.sing_progress()
     logger.info(
         f"bot [{event.self_id}] sing song title query in group [{event.group_id}]: {progress}"
@@ -629,10 +646,10 @@ async def _(event: GroupMessageEvent):
 
     if not progress:
         return
-    if not await config.is_cooldown(WHAT_SONG_COOLDOWN_KEY):
+    if not await guard_command_cooldown(
+        song_title_cmd, event, "sing.song_title", speak=False
+    ):
         return
-
-    await config.refresh_cooldown(WHAT_SONG_COOLDOWN_KEY)
     song_title = await get_song_title(progress.song_id)
     if not song_title:
         return
